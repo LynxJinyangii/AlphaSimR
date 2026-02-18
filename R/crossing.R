@@ -66,7 +66,8 @@ makeCross = function(pop,crossPlan,nProgeny=1,
               simParam$femaleCentromere,
               simParam$maleCentromere,
               simParam$quadProb,
-              simParam$nThreads)
+              simParam$nThreads,
+              simParam$isTrackRecGen) # Jinyang added
   dim(tmp$geno) = NULL # Account for matrix bug in RcppArmadillo
   rPop = new("RawPop",
              nInd=nrow(crossPlan),
@@ -79,6 +80,12 @@ makeCross = function(pop,crossPlan,nProgeny=1,
   }else{
     hist = NULL
   }
+  # Jinyang added
+  if(simParam$isTrackRecGen){
+    histGen = tmp$recHistGen
+  } else {
+    histGen = NULL
+  }
   return(.newPop(rawPop=rPop,
                  mother=pop@id[crossPlan[,1]],
                  father=pop@id[crossPlan[,2]],
@@ -87,6 +94,7 @@ makeCross = function(pop,crossPlan,nProgeny=1,
                  femaleParentPop=pop,
                  maleParentPop=pop,
                  hist=hist,
+                 histGen=histGen, # Jinyang added
                  simParam=simParam))
 }
 
@@ -333,7 +341,8 @@ makeCross2 = function(females,males,crossPlan,nProgeny=1,simParam=NULL){
             simParam$femaleCentromere,
             simParam$maleCentromere,
             simParam$quadProb,
-            simParam$nThreads)
+            simParam$nThreads,
+            simParam$isTrackRecGen) # Jinyang added
   dim(tmp$geno) = NULL # Account for matrix bug in RcppArmadillo
   rPop = new("RawPop",
              nInd=nrow(crossPlan),
@@ -346,6 +355,13 @@ makeCross2 = function(females,males,crossPlan,nProgeny=1,simParam=NULL){
   }else{
     hist = NULL
   }
+  # Jinyang added
+  if(simParam$isTrackRecGen){
+    histGen = tmp$recHistGen
+  } else {
+    histGen = NULL
+  }
+
   return(.newPop(rawPop=rPop,
                  mother=females@id[crossPlan[,1]],
                  father=males@id[crossPlan[,2]],
@@ -354,6 +370,7 @@ makeCross2 = function(females,males,crossPlan,nProgeny=1,simParam=NULL){
                  femaleParentPop=females,
                  maleParentPop=males,
                  hist=hist,
+                 histGen=histGen, # Jinyang added
                  simParam=simParam))
 }
 
@@ -519,7 +536,8 @@ self = function(pop,nProgeny=1,parents=NULL,keepParents=TRUE,
               simParam$femaleCentromere,
               simParam$maleCentromere,
               simParam$quadProb,
-              simParam$nThreads)
+              simParam$nThreads,
+              simParam$isTrackRecGen) # Jinyang added
   dim(tmp$geno) = NULL # Account for matrix bug in RcppArmadillo
   rPop = new("RawPop",
              nInd=nrow(crossPlan),
@@ -531,6 +549,12 @@ self = function(pop,nProgeny=1,parents=NULL,keepParents=TRUE,
     hist = tmp$recHist
   }else{
     hist = NULL
+  }
+  # Jinyang added
+  if(simParam$isTrackRecGen){
+    histGen = tmp$recHistGen
+  } else {
+    histGen = NULL
   }
   if(keepParents){
     return(.newPop(rawPop=rPop,
@@ -869,7 +893,7 @@ pedigreeCross = function(founderPop, id, mother, father, matchID=FALSE,
                                    simParam=simParam)
         }
       }
-      
+
       # Self?
       for(j in seq_len(nSelf[i])){
         output[[i]] = self(output[[i]],

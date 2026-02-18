@@ -642,12 +642,12 @@ newPop = function(rawPop,simParam=NULL,...){
 #' function in simParam
 #'
 #' @return Returns an object of \code{\link{Pop-class}}
-#' 
+#'
 #' @keywords internal
 .newPop = function(rawPop, id=NULL, mother=NULL, father=NULL,
                    iMother=NULL, iFather=NULL, isDH=NULL,
                    femaleParentPop=NULL, maleParentPop=NULL,
-                   hist=NULL, simParam=NULL,...){
+                   hist=NULL, histGen=NULL, simParam=NULL,...){ # Jinyang modified
   if(is.null(simParam)){
     simParam = get("SP",envir=.GlobalEnv)
   }
@@ -719,15 +719,15 @@ newPop = function(rawPop,simParam=NULL,...){
   pheno = gv
 
   if(simParam$nTraits>=1){
-    tmp = getGvIndex(rawPop, simParam$traits, simParam$activeQtl, 
+    tmp = getGvIndex(rawPop, simParam$traits, simParam$activeQtl,
                      simParam$qtlIndex, simParam$nTraits, simParam$nThreads)
-    
+
     gv = tmp[[1]]
     colnames(gv) = simParam$traitNames
-    
+
     gxeTmp = tmp[[2]]
     dim(gxeTmp) = NULL # Account for matrix bug in RcppArmadillo
-    
+
     # Move over gxeTmp for traits with GxE
     for(i in seq_len(simParam$nTraits)){
       if(.hasSlot(simParam$traits[[i]], "gxeEff")){
@@ -765,14 +765,14 @@ newPop = function(rawPop,simParam=NULL,...){
 
   if(simParam$isTrackPed){
     if(simParam$isTrackRec){
-      simParam$addToRec(lastId,id,iMother,iFather,isDH,hist,output@ploidy)
+      simParam$addToRec(lastId,id,iMother,iFather,isDH,hist,histGen,output@ploidy) #Jinyang modified
     }else{
       simParam$addToPed(lastId,id,iMother,iFather,isDH)
     }
   }else{
     simParam$updateLastId(lastId)
   }
-  
+
   output = simParam$finalizePop(output, simParam=simParam, ...)
 
   return(output)
