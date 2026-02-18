@@ -23,3 +23,6 @@ Notes.txt
 .Rproj.user/
 docs
 .DS_Store
+.idea/
+src/.idea/
+
