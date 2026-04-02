@@ -1,8 +1,4 @@
-library(reticulate)
 library(jsonlite)
-
-use_virtualenv("~/r-reticulate-env", required = TRUE)
-tskit <- import("tskit")
 
 morgan2bpRate <- function(m, x0, breaks, rates, side=c("left","right")) {
   # turn breaks into Morgan
@@ -37,20 +33,7 @@ morgan2bpRate <- function(m, x0, breaks, rates, side=c("left","right")) {
 
 }
 
-recHistMatToSegDf <- function(histMat, nLoci) {
 
-  origin <- as.integer(histMat[, 1])
-  starts <- as.integer(histMat[, 2])
-
-  ends <- c(starts[-1] - 1L, nLoci)
-
-  data.frame(
-    origin = origin,
-    locusStart = starts,
-    locusEnd = ends,
-    stringsAsFactors = FALSE
-  )
-}
 
 recHistGenMatToSegDf <- function(histMat, x0, breaks, rates, seqLen) {
 
@@ -78,49 +61,6 @@ recHistGenMatToSegDf <- function(histMat, x0, breaks, rates, seqLen) {
   )
 }
 
-recHistToSegDfWithParents <- function(SP, offspringPop, nLociByChr) {
-  childIds <- offspringPop@id
-  ped <- SP$pedigree[childIds, , drop = FALSE]
-
-  out <- list()
-  k <- 1
-
-  for (childId in childIds) {
-    x <- SP$recHist[[childId]]
-
-    motherId <- ped[childId, "mother"]
-    fatherId <- ped[childId, "father"]
-
-    for (cc in seq_along(x)) {
-      nLoci <- nLociByChr[[cc]]
-
-      haps <- as.vector(x[[cc]])
-      nHap <- length(haps)
-
-      for (h in seq_len(nHap)) {
-        seg <- recHistMatToSegDf(haps[[h]], nLoci = nLoci)
-
-        parentId <- if (h <= nHap/2) motherId else fatherId
-
-        seg$childId <- childId
-        seg$chr <- cc
-        seg$hap <- h
-        seg$parentId <- parentId
-
-        seg$parentHap <- seg$origin
-        seg$parentGlobalHapId <- (parentId - 1) * nHap + seg$parentHap
-
-        out[[k]] <- seg[, c("childId", "hap", "chr",
-                            "locusStart","locusEnd",
-                            "parentId","parentHap","parentGlobalHapId")]
-        k <- k + 1
-      }
-    }
-  }
-
-  do.call(rbind, out)
-}
-
 recHistGenToSegDfWithParents <- function(SP, offspringPop) {
   childIds <- offspringPop@id
   ped <- SP$pedigree[childIds, , drop = FALSE]
@@ -135,8 +75,8 @@ recHistGenToSegDfWithParents <- function(SP, offspringPop) {
     fatherId <- ped[childId, "father"]
 
     for (cc in seq_along(x)) {
-      ts <- tskit$load(chr_info[[cc]]$ts_path)
-      seqLen <- as.numeric(ts$sequence_length)
+      tc <- tc_load(chr_info[[cc]]$ts_path)
+      seqLen <- as.numeric(tc$sequence_length())
       breaks <- chr_info[[cc]]$breaks
       rates <- chr_info[[cc]]$rates
 
@@ -167,20 +107,6 @@ recHistGenToSegDfWithParents <- function(SP, offspringPop) {
   }
 
   do.call(rbind, out)
-}
-
-
-bridgeCollectSegFromSimOutput <- function(SP, simOutput) {
-  bridgeSegDfList <<- list()
-
-  nLociByChr <- lapply(chrKeptPosBpList, length)
-
-  for (k in 2:length(simOutput)) {
-    segDf <- recHistToSegDfWithParents(SP, simOutput[[k]], nLociByChr)
-    bridgeSegDfList[[length(bridgeSegDfList) + 1]] <<- segDf
-  }
-
-  invisible(bridgeSegDfList)
 }
 
 bridgeCollectSegGenFromSimOutput <- function(SP, simOutput) {

@@ -1,6 +1,66 @@
+library(reticulate)
 library(jsonlite)
 
-recHistMatToSegDf <- function(histMat, nLoci) {
+use_virtualenv("~/r-reticulate-env", required = TRUE)
+tskit <- import("tskit")
+
+genLogRecord <- function(parentPop, offspringPop, simParam, genIndex) {
+  list(
+    genIndex = genIndex,
+    offspringIds = offspringPop@id,
+    ibd = pullIbdHaplo(offspringPop, simParam = simParam)
+  )
+}
+
+ibdToSegDf <- function(ibdMat) {
+  # chr_locus
+  cn <- colnames(ibdMat)
+  # ind_hap
+  rn <- rownames(ibdMat)
+
+  chr <- as.integer(sub("_.*$", "", cn))
+  locus <- as.integer(sub("^.*_", "", cn))
+
+  childId <- sub("_.*$", "", rn)
+  hap <- as.integer(sub("^.*_", "", rn))
+
+  out <- list()
+  k <- 1
+
+  num_hap <- length(hap)
+  uniqueChr <- sort(unique(chr))
+
+  for (r in seq_len(num_hap)) {
+    # each row in ibdMat = every child hap
+    v <- ibdMat[r, ]
+    for (cc in uniqueChr) {
+      # get index from chr to extract parent hap (vv) and position (ll)
+      idx <- which(chr == cc)
+      vv <- v[idx]
+      ll <- locus[idx]
+
+      # find breakpoints
+      chg <- which(diff(vv) != 0)
+      starts <- c(1, chg + 1)
+      ends <- c(chg, length(vv))
+
+      out[[k]] <- data.frame(
+        childId = childId[r],
+        hap = hap[r],
+        chr = cc,
+        # extract position of ibd change
+        locusStart = ll[starts],
+        locusEnd = ll[ends],
+        origin = vv[starts],
+        stringsAsFactors = FALSE
+      )
+      k <- k + 1
+    }
+  }
+  do.call(rbind, out)
+}
+
+recHistMatToSegDfPy <- function(histMat, nLoci) {
 
   origin <- as.integer(histMat[, 1])
   starts <- as.integer(histMat[, 2])
@@ -16,7 +76,7 @@ recHistMatToSegDf <- function(histMat, nLoci) {
 }
 
 
-recHistToSegDfWithParents <- function(SP, offspringPop, nLociByChr) {
+recHistToSegDfWithParentsPy <- function(SP, offspringPop, nLociByChr) {
   childIds <- offspringPop@id
   ped <- SP$pedigree[childIds, , drop = FALSE]
 
@@ -36,7 +96,7 @@ recHistToSegDfWithParents <- function(SP, offspringPop, nLociByChr) {
       nHap <- length(haps)
 
       for (h in seq_len(nHap)) {
-        seg <- recHistMatToSegDf(haps[[h]], nLoci = nLoci)
+        seg <- recHistMatToSegDfPy(haps[[h]], nLoci = nLoci)
 
         parentId <- if (h <= nHap/2) motherId else fatherId
 
@@ -59,13 +119,13 @@ recHistToSegDfWithParents <- function(SP, offspringPop, nLociByChr) {
   do.call(rbind, out)
 }
 
-bridgeCollectSegFromSimOutput <- function(SP, simOutput) {
+bridgeCollectSegFromSimOutputPy <- function(SP, simOutput) {
   bridgeSegDfList <<- list()
 
   nLociByChr <- lapply(chrKeptPosBpList, length)
 
   for (k in 2:length(simOutput)) {
-    segDf <- recHistToSegDfWithParents(SP, simOutput[[k]], nLociByChr)
+    segDf <- recHistToSegDfWithParentsPy(SP, simOutput[[k]], nLociByChr)
     bridgeSegDfList[[length(bridgeSegDfList) + 1]] <<- segDf
   }
 
@@ -100,7 +160,7 @@ segDfToEdgeDfUsingBridge <- function(segDf, chr_info) {
   out
 }
 
-bridgeAllSegToEdgeDf <- function(chr_info) {
+bridgeAllSegToEdgeDfPy <- function(chr_info) {
   allSeg <- do.call(rbind, bridgeSegDfList)
 
   out <- allSeg
@@ -111,8 +171,8 @@ bridgeAllSegToEdgeDf <- function(chr_info) {
     posBp <- chrKeptPosBpList[[cc]]
 
     tsPath <- chr_info[[cc]]$ts_path
-    tc <- tc_load(tsPath)
-    seqLen <- tc$sequence_length()
+    ts <- tskit$load(tsPath)
+    seqLen <- ts$sequence_length
 
     idx <- which(out$chr == cc)
     for (i in idx) {
@@ -126,7 +186,7 @@ bridgeAllSegToEdgeDf <- function(chr_info) {
   out
 }
 
-bridgeComputeIndTime <- function(pedigree) {
+bridgeComputeIndTimePy <- function(pedigree) {
   n <- nrow(pedigree)
   indTime <- rep(NA, n)
 
@@ -145,21 +205,48 @@ bridgeComputeIndTime <- function(pedigree) {
 }
 
 
-bridgeWriteTrees <- function(chr_info, edgeDf, SP, out_dir = NULL,
+bridgeWriteTreesPy <- function(chr_info, edgeDf, SP, out_dir = NULL,
                              out_basename = "AlphaSimR_extended") {
+  nodeSchema <- tskit$MetadataSchema(list(
+    codec = "json",
+    type = "object",
+    properties = list(
+      alphaSimR = list(
+        type = "object",
+        properties = list(
+          id = list(type = "string", description = "AlphaSimR node id (childId_hap)")
+        ),
+        required = list("id"),
+        additionalProperties = FALSE
+      )
+    ),
+    required = list("alphaSimR"),
+    additionalProperties = FALSE
+  ))
 
-  indTime <- bridgeComputeIndTime(SP$pedigree)
+  indTime <- bridgeComputeIndTimePy(SP$pedigree)
 
   nodeIdMapByChr <<- vector("list", length(chr_info))
   indIdMapByChr  <<- vector("list", length(chr_info))
 
   for (cc in seq_along(chr_info)) {
-
+    #nodeIdMap <<- list()
     nodeIdMapByChr[[cc]] <<- list()
     indIdMapByChr[[cc]]  <<- list()
 
-    ts <- ts_load(chr_info[[cc]]$ts_path)
-    tc <- ts$dump_tables()
+    ts <- tskit$load(chr_info[[cc]]$ts_path)
+    tables <- ts$dump_tables()
+    reticulate::py_set_attr(tables$nodes, "metadata_schema", nodeSchema)
+
+    # for metadata
+    n <- tables$nodes$num_rows
+    encoded <- vector("list", n)
+    for (i in 0:(n - 1)) {
+      md_i <- tables$nodes[i]$metadata
+      encoded[[i + 1]] <- tables$nodes$metadata_schema$encode_row(md_i)
+    }
+    # ----
+
 
     df <- edgeDf[edgeDf$chr == cc, , drop = FALSE]
     if (nrow(df) == 0) next
@@ -168,7 +255,7 @@ bridgeWriteTrees <- function(chr_info, edgeDf, SP, out_dir = NULL,
     sampNodeId <- ts$samples()
     sampIndRow <- integer(length(sampNodeId))
     for (i in seq_along(sampNodeId)) {
-      sampIndRow[i] <- tc$node_table_get_row(sampNodeId[i])$individual
+      sampIndRow[i] <- tables$nodes[sampNodeId[i]]$individual
     }
     if (any(sampIndRow < 0)) {
       bad <- which(sampIndRow < 0)[1]
@@ -185,16 +272,21 @@ bridgeWriteTrees <- function(chr_info, edgeDf, SP, out_dir = NULL,
       indIdMapByChr[[cc]][[as.character(ind)]] <<- indRow
 
       for (h in 1:ploidy) {
+        #nodeIdMap[[paste(ind, h, sep = "_")]] <<- as.integer(sampNodeId[[idx]])
         nodeId <- as.integer(unlist(sampNodeId[[idx]]))[1]
         key <- paste(ind, h, sep = "_")
         nodeIdMapByChr[[cc]][[key]] <<- nodeId
-        #  list(alphaSimR = list(id = key)))
+        #tables$nodes$metadata[[nodeId + 1]] <- tskit$pack_bytes(list(alphaSimR = list(id = key)))
+        #tables$nodes[nodeId + 1] <- tables$nodes[nodeId + 1]$replace(metadata=list(alphaSimR = list(id = key)))
+        encoded[[nodeId + 1]] <- tables$nodes$metadata_schema$encode_row(
+          list(alphaSimR = list(id = key)))
         idx <- idx + 1
       }
     }
+    tables$nodes$packset_metadata(encoded)
 
     # add indIDs for offSpring nodes
-    nextInd <- as.integer(tc$num_individuals())
+    nextInd <- as.integer(tables$individuals$num_rows)
     addNewIndividual <- function(alphaId) {
       key <- as.character(alphaId)
       if (!is.null(indIdMapByChr[[cc]][[key]])) return(indIdMapByChr[[cc]][[key]])
@@ -206,12 +298,9 @@ bridgeWriteTrees <- function(chr_info, edgeDf, SP, out_dir = NULL,
       fRow <- addNewIndividual(f)
 
       newId <- nextInd
-      tc$individual_table_add_row(
+      tables$individuals$add_row(
         parents = list(as.integer(mRow), as.integer(fRow)),
-        metadata = charToRaw(toJSON(
-          list(file_id=as.integer(newId)),
-        auto_unbox = TRUE)))
-
+        metadata = list(file_id=as.integer(newId)))
       indIdMapByChr[[cc]][[key]] <<- as.integer(newId)
 
       nextInd <<- nextInd + 1L
@@ -226,20 +315,20 @@ bridgeWriteTrees <- function(chr_info, edgeDf, SP, out_dir = NULL,
     # append child nodes
     childKeys <- unique(paste(df$childId, df$hap, sep = "_"))
     for (key in childKeys) {
+      #if (is.null(nodeIdMap[[key]])) {
       if (is.null(nodeIdMapByChr[[cc]][[key]])) {
         childId <- as.integer(sub("_.*$", "", key))
         indRow  <- indIdMapByChr[[cc]][[as.character(childId)]]
 
-        tc$node_table_add_row(
+        tables$nodes$add_row(
           flags = 0L,
           time  = indTime[[childId]],
           population = -1L,
           individual = indRow,
-          metadata = as.character(toJSON(
-            list(alphaSimR = list(id = key)),
-            auto_unbox = TRUE, force = TRUE))
+          metadata = list(alphaSimR = list(id = key))
         )
-        nodeIdMapByChr[[cc]][[key]] <<- as.integer(tc$num_nodes() - 1)
+        #nodeIdMap[[key]] <<- as.integer(tables$nodes$num_rows - 1)
+        nodeIdMapByChr[[cc]][[key]] <<- as.integer(tables$nodes$num_rows - 1)
       }
     }
 
@@ -248,21 +337,24 @@ bridgeWriteTrees <- function(chr_info, edgeDf, SP, out_dir = NULL,
       parentKey <- paste(df$parentId[i], df$parentHap[i], sep = "_")
       childKey  <- paste(df$childId[i], df$hap[i], sep = "_")
 
+      #if (is.null(nodeIdMap[[key]])) {
       if (is.null(nodeIdMapByChr[[cc]][[parentKey]])) {
         stop("Missing parent node for key=", parentKey,
              " on chr=", cc, ". Check founder mapping.")
       }
 
-      tc$edge_table_add_row(
+      tables$edges$add_row(
         left   = df$left[i],
         right  = df$right[i],
+        #parent = as.integer(nodeIdMap[[parentKey]]),
+        #child  = as.integer(nodeIdMap[[childKey]])
         parent = nodeIdMapByChr[[cc]][[parentKey]],
         child = nodeIdMapByChr[[cc]][[childKey]]
       )
     }
 
-    tc$sort()
-    newTs <- tc$tree_sequence()
+    tables$sort()
+    newTs <- tables$tree_sequence()
 
     outDirCc <- if (is.null(out_dir)) dirname(chr_info[[cc]]$ts_path) else out_dir
     outPath <- file.path(outDirCc, paste0(out_basename, "_chr", cc - 1, ".trees"))

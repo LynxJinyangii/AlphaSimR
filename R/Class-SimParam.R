@@ -2049,6 +2049,7 @@ SimParam = R6Class(
     #' @param father vector of father iids
     #' @param isDH indicator for DH lines
     #' @param hist new recombination history
+    #' @param histGen new recombination history (genetic coordinate)
     #' @param ploidy ploidy level
     addToRec = function(lastId,id,mother,father,isDH,
                         hist,

@@ -1,4 +1,8 @@
+library(reticulate)
 library(jsonlite)
+
+use_virtualenv("~/r-reticulate-env", required = TRUE)
+tskit <- import("tskit")
 
 morgan2bpRate <- function(m, x0, breaks, rates, side=c("left","right")) {
   # turn breaks into Morgan
@@ -33,9 +37,7 @@ morgan2bpRate <- function(m, x0, breaks, rates, side=c("left","right")) {
 
 }
 
-
-
-recHistGenMatToSegDf <- function(histMat, x0, breaks, rates, seqLen) {
+recHistGenMatToSegDfPy <- function(histMat, x0, breaks, rates, seqLen) {
 
   origin <- as.integer(histMat[, 1])
   mStart <- as.numeric(histMat[, 2])
@@ -61,7 +63,8 @@ recHistGenMatToSegDf <- function(histMat, x0, breaks, rates, seqLen) {
   )
 }
 
-recHistGenToSegDfWithParents <- function(SP, offspringPop) {
+
+recHistGenToSegDfWithParentsPy <- function(SP, offspringPop) {
   childIds <- offspringPop@id
   ped <- SP$pedigree[childIds, , drop = FALSE]
 
@@ -75,8 +78,8 @@ recHistGenToSegDfWithParents <- function(SP, offspringPop) {
     fatherId <- ped[childId, "father"]
 
     for (cc in seq_along(x)) {
-      tc <- tc_load(chr_info[[cc]]$ts_path)
-      seqLen <- as.numeric(tc$sequence_length())
+      ts <- tskit$load(chr_info[[cc]]$ts_path)
+      seqLen <- as.numeric(ts$sequence_length)
       breaks <- chr_info[[cc]]$breaks
       rates <- chr_info[[cc]]$rates
 
@@ -86,7 +89,7 @@ recHistGenToSegDfWithParents <- function(SP, offspringPop) {
       nHap <- length(haps)
 
       for (h in seq_len(nHap)) {
-        seg <- recHistGenMatToSegDf(haps[[h]], x0, breaks, rates, seqLen)
+        seg <- recHistGenMatToSegDfPy(haps[[h]], x0, breaks, rates, seqLen)
 
         parentId <- if (h <= nHap/2) motherId else fatherId
 
@@ -109,11 +112,12 @@ recHistGenToSegDfWithParents <- function(SP, offspringPop) {
   do.call(rbind, out)
 }
 
-bridgeCollectSegGenFromSimOutput <- function(SP, simOutput) {
+
+bridgeCollectSegGenFromSimOutputPy <- function(SP, simOutput) {
   bridgeSegDfListGen <<- list()
 
   for (k in 2:length(simOutput)) {
-    segDf <- recHistGenToSegDfWithParents(SP, simOutput[[k]])
+    segDf <- recHistGenToSegDfWithParentsPy(SP, simOutput[[k]])
     bridgeSegDfListGen[[length(bridgeSegDfListGen) + 1]] <<- segDf
   }
 
