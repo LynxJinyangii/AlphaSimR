@@ -1,6 +1,6 @@
 # fmt: skip file
 
-#' @useDynLib AlphaSimRTest, .registration = TRUE
+#' @useDynLib AlphaSimR, .registration = TRUE
 #' @import Rcpp
 #' @importFrom methods new validObject is .hasSlot slot
 #' @importFrom methods show classLabel
@@ -27,6 +27,6 @@
 #'
 #' Please see the introductory vignette for instructions for using this package.
 #' The vignette can be viewed using the following command:
-#' \code{vignette("intro",package="AlphaSimRTest")}
+#' \code{vignette("intro",package="AlphaSimR")}
 #' @keywords internal
 "_PACKAGE"

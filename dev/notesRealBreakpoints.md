@@ -15,7 +15,7 @@ record the real recombination breakpoints.
 
 ### Load tree sequences
 
-    library(AlphaSimRTest)
+    library(AlphaSimR)
     use_virtualenv("~/r-reticulate-env", required = TRUE)
     tskit <- import("tskit")
     devtools::load_all()

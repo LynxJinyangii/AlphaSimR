@@ -21,7 +21,7 @@ In this version, a recHistGen object (similar to recHist) was added to record th
 ### Load tree sequences
 
 ```
-library(AlphaSimRTest)
+library(AlphaSimR)
 use_virtualenv("~/r-reticulate-env", required = TRUE)
 tskit <- import("tskit")
 devtools::load_all()

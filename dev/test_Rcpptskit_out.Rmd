@@ -33,7 +33,7 @@ Note that the `echo = FALSE` parameter was added to the code chunk to prevent pr
 > use_virtualenv("~/r-reticulate-env", required = TRUE)
 > tskit <- import("tskit")
 > devtools::load_all()
-ℹ Loading AlphaSimRTest
+ℹ Loading AlphaSimR
 > L1 <- 1e6
 > L2 <- 2e6
 > # here, use the same recombination map as used in msprime

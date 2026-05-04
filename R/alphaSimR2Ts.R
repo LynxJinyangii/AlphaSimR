@@ -207,7 +207,8 @@ bridgeWriteTrees <- function(chr_info, edgeDf, SP, out_dir = NULL,
 
       newId <- nextInd
       tc$individual_table_add_row(
-        parents = list(as.integer(mRow), as.integer(fRow)),
+        #parents = list(as.integer(mRow), as.integer(fRow)),
+        parents = c(as.integer(mRow), as.integer(fRow)),
         metadata = charToRaw(toJSON(
           list(file_id=as.integer(newId)),
         auto_unbox = TRUE)))
